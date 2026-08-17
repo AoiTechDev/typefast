@@ -15,7 +15,7 @@ export default function Home() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [cursor, setCursor] = useState<number>(0);
   const [timer, setTimer] = useState<number>(0);
-
+  const [hasWindowFocus, setHasWindowFocus] = useState<boolean>(true)
   const handleInput = (e: ChangeEvent<HTMLTextAreaElement>) => {
     const typedChar = e.currentTarget.value.slice(-1);
     const isCorrect = typedChar === randomText[cursor]?.char;
@@ -32,15 +32,36 @@ export default function Home() {
   };
 
   useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
     const id = setInterval(() => {
       setTimer((prev) => prev + 1);
     }, 1000);
 
     return () => clearInterval(id);
   }, []);
+
+
+  useEffect(() => {
+    const handleFocus = () => {
+      setHasWindowFocus(true);
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 0);
+    };
+    const handleBlur = () => {
+      setHasWindowFocus(false);
+    };
+  
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('blur', handleBlur);
+  
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, []);
+  
+ 
+
 
   const handleKeys = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Backspace") {
