@@ -14,7 +14,6 @@ export const rooms = pgTable("rooms", {
   status: text("status", { enum: ["waiting", "racing", "finished"] })
     .notNull()
     .default("waiting"),
-  // bez klucza obcego, bo rooms i players wskazywalyby na siebie nawzajem
   hostPlayerId: uuid("host_player_id"),
   raceText: text("race_text"),
   maxPlayers: integer("max_players").notNull().default(8),
