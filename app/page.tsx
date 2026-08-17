@@ -16,6 +16,11 @@ export default function Home() {
   const [cursor, setCursor] = useState<number>(0);
   const [timer, setTimer] = useState<number>(0);
   const [hasWindowFocus, setHasWindowFocus] = useState<boolean>(true)
+
+  const allCorrect = randomText.every(ch => ch.color !== 'white' && ch.color !== 'red');
+  console.log(allCorrect)
+  const gameOver = randomText.length > 0 && allCorrect;
+
   const handleInput = (e: ChangeEvent<HTMLTextAreaElement>) => {
     const typedChar = e.currentTarget.value.slice(-1);
     const isCorrect = typedChar === randomText[cursor]?.char;
@@ -33,11 +38,12 @@ export default function Home() {
 
   useEffect(() => {
     const id = setInterval(() => {
+      if(gameOver) return
       setTimer((prev) => prev + 1);
     }, 1000);
 
     return () => clearInterval(id);
-  }, []);
+  }, [gameOver]);
 
 
   useEffect(() => {
@@ -50,17 +56,17 @@ export default function Home() {
     const handleBlur = () => {
       setHasWindowFocus(false);
     };
-  
+
     window.addEventListener('focus', handleFocus);
     window.addEventListener('blur', handleBlur);
-  
+
     return () => {
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('blur', handleBlur);
     };
   }, []);
-  
- 
+
+
 
 
   const handleKeys = (e: KeyboardEvent<HTMLTextAreaElement>) => {
