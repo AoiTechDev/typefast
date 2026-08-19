@@ -1,5 +1,7 @@
 import { getHostId } from '@/actions/get-host-id'
+import { getPlayerList } from '@/actions/get-player-list'
 import CopyInvLinkButton from '@/components/CopyInvLinkButton'
+import Lobby from '@/components/Lobby'
 import { cookies } from 'next/headers'
 import React from 'react'
 
@@ -15,11 +17,12 @@ const page = async ({ params }: PageProps) => {
   const hostId = await getHostId(slug)
   const isPlayerHost = String(hostId) === String(playerId?.value)
 
+  const room = await getPlayerList(slug)
   return (
     <div>
       {isPlayerHost && <CopyInvLinkButton text={`http://localhost:3000/invitation?code=${slug}`} />}
 
-
+      <Lobby code={slug} hostId={hostId} initialPlayers={room ?? []} />
     </div>
   )
 }
