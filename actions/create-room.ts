@@ -6,7 +6,6 @@ import { db } from "../lib/db";
 import { players, rooms } from "../lib/db/schema";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { randomRaceText } from "@/lib/dummy-text";
 export type ActionState = {
   error?: string;
 };
@@ -38,7 +37,7 @@ export const createRoom = async (
 
     await db
       .update(rooms)
-      .set({ hostPlayerId: player.id, raceText: randomRaceText })
+      .set({ hostPlayerId: player.id })
       .where(eq(rooms.id, room.id));
 
     const cookieStore = await cookies();

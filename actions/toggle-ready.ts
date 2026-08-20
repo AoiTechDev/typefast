@@ -2,6 +2,7 @@
 
 import { db } from "@/lib/db";
 import { players, rooms } from "@/lib/db/schema";
+import { randomRaceText } from "@/lib/dummy-text";
 import { roomChannelName } from "@/lib/pusher-client";
 import { pusherServer } from "@/lib/pusher-server";
 import { normalizeRoomCode } from "@/lib/room-code";
@@ -38,5 +39,37 @@ export const toggleReady = async (code: string) => {
     isReady: updated.isReady,
   });
 
+  const roomPlayers = await db
+    .select({ isReady: players.isReady })
+    .from(players)
+    .innerJoin(rooms, eq(players.roomId, rooms.id))
+    .where(eq(rooms.code, normalizeRoomCode(code)));
+
+  const everyoneReady =
+    roomPlayers.length >= 2 && roomPlayers.every((player) => player.isReady);
+
+  if (everyoneReady) {
+    const [started] = await db
+      .update(rooms)
+      .set({
+        status: "racing",
+        raceText: randomRaceText,
+        startedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(rooms.code, normalizeRoomCode(code)),
+          eq(rooms.status, "waiting"),
+        ),
+      )
+      .returning({ raceText: rooms.raceText });
+
+    if (!started) return { isReady: true };
+
+    await pusherServer.trigger(roomChannelName(code), "race:start", {
+      raceText: started.raceText,
+      countdownMs: 5000,
+    });
+  }
   return { isReady: updated.isReady };
 };
