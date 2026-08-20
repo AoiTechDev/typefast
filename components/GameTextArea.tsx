@@ -2,12 +2,19 @@
 import { formatTimer, splitText } from "@/lib/utils";
 import { ChangeEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 
-
 type GameTextAreaProps = {
     raceText: string;
-    onProgress: (progress: number) => void;
+    onProgress: (progress: number, wpm: number) => void;
     onFinish: (typedText: string) => void;
 }
+
+const LEGEND = [
+    { label: "Untyped", className: "text-dim" },
+    { label: "Correct", className: "text-ink" },
+    { label: "Wrong", className: "bg-hot text-panel" },
+    { label: "Cursor", className: "bg-lime text-ink" },
+];
+
 export default function GameTextArea({ raceText, onProgress, onFinish }: GameTextAreaProps) {
     const [randomText, setRandomText] = useState(splitText(raceText))
     const [textTypedByUser, setTextTypedByUser] = useState("");
@@ -17,43 +24,64 @@ export default function GameTextArea({ raceText, onProgress, onFinish }: GameTex
     const [isFocused, setIsFocused] = useState(false);
     const typedRef = useRef<string>("")
     const finishedRef = useRef(false)
-    const allCorrect = randomText.every(ch => ch.color !== 'black' && ch.color !== 'red');
-    const gameOver = randomText.length > 0 && allCorrect;
 
+    const correctChars = randomText.filter((ch) => ch.color === "green").length;
+    const wrongChars = randomText.filter((ch) => ch.color === "red").length;
+    const typedChars = correctChars + wrongChars;
+
+    // 1 word ≈ 5 chars; use only correct (green) characters
+    const wpm = timer === 0 ? 0 : (correctChars / 5) * (60 / timer);
+    const accuracy = typedChars === 0 ? 100 : Math.round((correctChars / typedChars) * 100);
+    const gameOver = randomText.length > 0 && cursor >= randomText.length;
 
     const handleInput = (e: ChangeEvent<HTMLTextAreaElement>) => {
+        if (gameOver) return;
+
         const typedChar = e.currentTarget.value.slice(-1);
         const isCorrect = typedChar === randomText[cursor]?.char;
 
-        setRandomText((prev) =>
-            prev.map((item, index) =>
-                index === cursor
-                    ? { ...item, color: isCorrect ? "green" : "red" }
-                    : item,
-            ),
+        const next = randomText.map((item, index) =>
+            index === cursor ? { ...item, color: isCorrect ? ("green" as const) : ("red" as const) } : item,
         );
 
-
+        setRandomText(next);
         setTextTypedByUser("");
+        typedRef.current += typedChar;
 
-        typedRef.current += typedChar
+        const nextCursor = cursor + 1;
+        setCursor(nextCursor);
 
-        const idxOfFirstRed = randomText.findIndex(i => i.color === 'red')
-        if (idxOfFirstRed !== -1) {
-            onProgress(idxOfFirstRed / randomText.length)
-            const nextCursor = cursor + 1
-            setCursor(nextCursor)
-        } else {
-            const nextCursor = cursor + 1
-            setCursor(nextCursor)
-            onProgress(nextCursor / randomText.length)
+        const firstWrong = next.findIndex((item) => item.color === "red");
+        const reached = firstWrong === -1 ? nextCursor : firstWrong;
+        onProgress(reached / next.length, wpm);
 
-
-            if (nextCursor >= randomText.length && !finishedRef.current) {
-                finishedRef.current = true
-                onFinish(typedRef.current)
-            }
+        if (nextCursor >= next.length && !finishedRef.current) {
+            finishedRef.current = true;
+            onFinish(typedRef.current);
         }
+    };
+
+    const handleKeys = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key !== "Backspace") return;
+
+        e.preventDefault();
+
+        if (cursor === 0) return;
+
+        typedRef.current = typedRef.current.slice(0, -1);
+
+        const next = randomText.map((item, index) =>
+            index === cursor - 1 ? { ...item, color: "black" as const } : item,
+        );
+
+        setRandomText(next);
+
+        const nextCursor = cursor - 1;
+        setCursor(nextCursor);
+
+        const firstWrong = next.findIndex((item) => item.color === "red");
+        const reached = firstWrong === -1 ? nextCursor : firstWrong;
+        onProgress(reached / next.length, wpm);
     };
 
     useEffect(() => {
@@ -64,7 +92,6 @@ export default function GameTextArea({ raceText, onProgress, onFinish }: GameTex
 
         return () => clearInterval(id);
     }, [gameOver]);
-
 
     const focusInput = useCallback(() => {
         inputRef.current?.focus();
@@ -86,66 +113,79 @@ export default function GameTextArea({ raceText, onProgress, onFinish }: GameTex
         };
     }, [focusInput]);
 
+    const charClassName = (color: string, index: number) => {
+        if (index === cursor) return "bg-lime text-ink";
+        if (color === "green") return "text-ink";
+        if (color === "red") return "bg-hot text-panel";
 
-
-
-    const handleKeys = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.key === "Backspace") {
-
-            if (typedRef.current)
-                typedRef.current = typedRef.current?.slice(0, - 1)
-
-
-
-            e.preventDefault();
-            setRandomText((prev) =>
-                prev.map((item, index) =>
-                    index === cursor - 1 ? { ...item, color: "black" } : item,
-                ),
-            );
-
-            setCursor((prev) => Math.max(0, prev - 1));
-        }
-
+        return "text-dim";
     };
 
-
-    // 1 word ≈ 5 chars; use only correct (green) characters
-    const correctChars = randomText.filter((ch) => ch.color === "green").length;
-    const wpm = timer === 0 ? 0 : (correctChars / 5) * (60 / timer);
-
     return (
-        <div className="m-auto ">
-            <div onClick={focusInput} className="cursor-text">
-                <div className="flex justify-between items-center max-w-[700px]">
-                    <div>{wpm.toFixed(0)} WPM</div>
-                    <div>{formatTimer(timer)}</div>
+        <div className="mx-auto max-w-3xl">
+            <div className="grid grid-cols-3 gap-4">
+                <div className="border-[4px] border-ink bg-lime px-4 py-3 shadow-[6px_6px_0_0_var(--color-ink)]">
+                    <p className="font-mono text-[11px] font-bold tracking-widest uppercase">WPM</p>
+                    <p className="text-3xl font-extrabold tabular-nums">{wpm.toFixed(0)}</p>
                 </div>
-                <div className="text-balance z-0 relative max-w-[700px]">
+                <div className="border-[4px] border-ink bg-panel px-4 py-3 shadow-[6px_6px_0_0_var(--color-ink)]">
+                    <p className="font-mono text-[11px] font-bold tracking-widest text-dim uppercase">
+                        Elapsed
+                    </p>
+                    <p className="text-3xl font-extrabold tabular-nums">{formatTimer(timer)}</p>
+                </div>
+                <div className="border-[4px] border-ink bg-panel px-4 py-3 shadow-[6px_6px_0_0_var(--color-ink)]">
+                    <p className="font-mono text-[11px] font-bold tracking-widest text-dim uppercase">
+                        Accuracy
+                    </p>
+                    <p className="text-3xl font-extrabold tabular-nums">{accuracy}%</p>
+                </div>
+            </div>
 
-                    <div className={isFocused ? "-z-10" : "-z-10 blur-sm"}>
-                        {[...randomText].map((ch, index) => (
-                            <span key={index} style={{
-                                color: ch.color
-                            }}>{ch.char}</span>
-                        ))}
-                    </div>
+            <div
+                onClick={focusInput}
+                className="relative mt-6 cursor-text border-[4px] border-ink bg-panel p-7 shadow-[10px_10px_0_0_var(--color-ink)]"
+            >
+                <p
+                    className={`font-mono text-xl leading-[1.9] break-words ${
+                        isFocused ? "" : "blur-[6px] select-none"
+                    }`}
+                >
+                    {randomText.map((ch, index) => (
+                        <span key={index} className={charClassName(ch.color, index)}>
+                            {ch.char}
+                        </span>
+                    ))}
+                </p>
 
-                    {!isFocused && randomText.length > 0 && (
-                        <div className="absolute inset-0 flex items-center justify-center text-sm">
+                {!isFocused && randomText.length > 0 && (
+                    <div className="absolute inset-0 grid place-items-center">
+                        <span className="border-[4px] border-ink bg-hot px-7 py-4 text-xl font-extrabold tracking-wide text-panel uppercase shadow-[8px_8px_0_0_var(--color-ink)]">
                             Click here to type
-                        </div>
-                    )}
-                </div>
+                        </span>
+                    </div>
+                )}
+
                 <textarea
                     ref={inputRef}
                     value={textTypedByUser}
                     onChange={handleInput}
-                    className="absolute opacity-0"
+                    className="absolute top-0 left-0 h-full w-full cursor-text opacity-0"
                     onKeyDown={handleKeys}
                     onFocus={() => setIsFocused(true)}
                     onBlur={() => setIsFocused(false)}
                 />
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-5">
+                {LEGEND.map((item) => (
+                    <span key={item.label} className="flex items-center gap-2">
+                        <span className={`px-1 font-mono text-sm ${item.className}`}>n</span>
+                        <span className="font-mono text-[11px] font-bold tracking-widest text-dim uppercase">
+                            {item.label}
+                        </span>
+                    </span>
+                ))}
             </div>
         </div>
     );
