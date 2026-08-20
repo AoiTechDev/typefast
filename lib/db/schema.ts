@@ -6,6 +6,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -23,7 +24,28 @@ export const rooms = pgTable("rooms", {
     .defaultNow(),
   startedAt: timestamp("started_at", { withTimezone: true }),
 });
-
+export const results = pgTable(
+  "results",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    roomId: uuid("room_id")
+      .notNull()
+      .references(() => rooms.id, { onDelete: "cascade" }),
+    playerId: uuid("player_id")
+      .notNull()
+      .references(() => players.id, { onDelete: "cascade" }),
+    durationMs: integer("duration_ms").notNull(),
+    wpm: integer("wpm").notNull(),
+    accuracy: integer("accuracy").notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("results_room_player_unique").on(table.roomId, table.playerId),
+    index("results_room_id_idx").on(table.roomId),
+  ],
+);
 export const players = pgTable(
   "players",
   {
@@ -50,6 +72,11 @@ export const playersRelations = relations(players, ({ one }) => ({
     fields: [players.roomId],
     references: [rooms.id],
   }),
+}));
+
+export const resultsRelations = relations(results, ({ one }) => ({
+  room: one(rooms, { fields: [results.roomId], references: [rooms.id] }),
+  player: one(players, { fields: [results.playerId], references: [players.id] }),
 }));
 
 export type Room = typeof rooms.$inferSelect;

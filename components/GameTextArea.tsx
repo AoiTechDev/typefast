@@ -6,20 +6,19 @@ import { ChangeEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } 
 type GameTextAreaProps = {
     raceText: string;
     onProgress: (progress: number) => void;
+    onFinish: (typedText: string) => void;
 }
-export default function GameTextArea({ raceText, onProgress }: GameTextAreaProps) {
+export default function GameTextArea({ raceText, onProgress, onFinish }: GameTextAreaProps) {
     const [randomText, setRandomText] = useState(splitText(raceText))
     const [textTypedByUser, setTextTypedByUser] = useState("");
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const [cursor, setCursor] = useState<number>(0);
     const [timer, setTimer] = useState<number>(0);
     const [isFocused, setIsFocused] = useState(false);
-
+    const typedRef = useRef<string>("")
+    const finishedRef = useRef(false)
     const allCorrect = randomText.every(ch => ch.color !== 'black' && ch.color !== 'red');
     const gameOver = randomText.length > 0 && allCorrect;
-
-
-
 
 
     const handleInput = (e: ChangeEvent<HTMLTextAreaElement>) => {
@@ -33,7 +32,11 @@ export default function GameTextArea({ raceText, onProgress }: GameTextAreaProps
                     : item,
             ),
         );
+
+
         setTextTypedByUser("");
+
+        typedRef.current += typedChar
 
         const idxOfFirstRed = randomText.findIndex(i => i.color === 'red')
         if (idxOfFirstRed !== -1) {
@@ -44,6 +47,12 @@ export default function GameTextArea({ raceText, onProgress }: GameTextAreaProps
             const nextCursor = cursor + 1
             setCursor(nextCursor)
             onProgress(nextCursor / randomText.length)
+
+
+            if (nextCursor >= randomText.length && !finishedRef.current) {
+                finishedRef.current = true
+                onFinish(typedRef.current)
+            }
         }
     };
 
@@ -82,16 +91,24 @@ export default function GameTextArea({ raceText, onProgress }: GameTextAreaProps
 
     const handleKeys = (e: KeyboardEvent<HTMLTextAreaElement>) => {
         if (e.key === "Backspace") {
+
+            if (typedRef.current)
+                typedRef.current = typedRef.current?.slice(0, - 1)
+
+
+
             e.preventDefault();
             setRandomText((prev) =>
                 prev.map((item, index) =>
                     index === cursor - 1 ? { ...item, color: "black" } : item,
                 ),
             );
+
             setCursor((prev) => Math.max(0, prev - 1));
         }
 
     };
+
 
     // 1 word ≈ 5 chars; use only correct (green) characters
     const correctChars = randomText.filter((ch) => ch.color === "green").length;

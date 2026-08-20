@@ -2,16 +2,26 @@
 import type { Members, PresenceChannel } from 'pusher-js'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { pusherClient, roomChannelName } from '@/lib/pusher-client'
+import { pusherClient } from '@/lib/pusher-client'
+import { roomChannelName } from '@/lib/pusher-channels'
 import GameTextArea from './GameTextArea'
 import { type Player, type Room } from '@/lib/db/schema'
 import { toggleReady } from '@/actions/toggle-ready'
+import { finishRace } from '@/actions/finish-race'
 
 type LobbyPlayer = {
   id: string
   nick: string
   isReady: boolean
   progress: number
+}
+
+type Standing = {
+  playerId: string
+  nick: string
+  wpm: number
+  accuracy: number
+  durationMs: number
 }
 
 type PresenceMember = {
@@ -38,8 +48,10 @@ const Lobby = ({ code, hostId, lobby }: LobbyProps) => {
   const [remaining, setRemaining] = useState<number | null>(null)
   const [myId, setMyId] = useState<string | null>(null)
   const [finished, setFinished] = useState(false)
+  const [standings, setStandings] = useState<Standing[] | null>(null)
 
   const progressRef = useRef<number>(0)
+  const lastSentRef = useRef<number | null>(null)
   const channelRef = useRef<PresenceChannel | null>(null)
 
   const isRacing = startAt !== null && remaining !== null && remaining <= 0 && !finished
@@ -104,7 +116,9 @@ const Lobby = ({ code, hostId, lobby }: LobbyProps) => {
       ({ raceText, countdownMs }: { raceText: string; countdownMs: number }) => {
         setRaceText(raceText)
         setFinished(false)
+        setStandings(null)
         setStartAt(Date.now() + countdownMs)
+        lastSentRef.current = null
         setPlayers(current => current.map(player => ({ ...player, progress: 0 })))
       },
     )
@@ -119,6 +133,22 @@ const Lobby = ({ code, hostId, lobby }: LobbyProps) => {
         )
       },
     )
+
+    channel.bind(
+      'player:finished',
+      ({ playerId }: { playerId: string }) => {
+        setPlayers(current =>
+          current.map(player =>
+            player.id === playerId ? { ...player, progress: 1 } : player,
+          ),
+        )
+      },
+    )
+
+    channel.bind('race:finished', ({ standings }: { standings: Standing[] }) => {
+      setStandings(standings)
+      setFinished(true)
+    })
 
     return () => {
       channel.unbind_all()
@@ -146,7 +176,13 @@ const Lobby = ({ code, hostId, lobby }: LobbyProps) => {
     if (!isRacing) return
 
     const id = setInterval(() => {
-      channelRef.current?.trigger('client-progress', { progress: progressRef.current })
+      const progress = progressRef.current
+
+      if (progress === lastSentRef.current) return
+      if (document.hidden) return
+
+      lastSentRef.current = progress
+      channelRef.current?.trigger('client-progress', { progress })
     }, 250)
 
     return () => clearInterval(id)
@@ -167,6 +203,10 @@ const Lobby = ({ code, hostId, lobby }: LobbyProps) => {
 
   const countingDown = remaining !== null && remaining > 0
 
+  const onFinish = useCallback((typedText: string) => {
+    if (startAt === null) return
+    finishRace(code, { durationMs: Date.now() - startAt, typedText })
+  }, [startAt, code])
   return (
     <div className="flex flex-col bg-white">
       {players.map(player => (
@@ -189,7 +229,23 @@ const Lobby = ({ code, hostId, lobby }: LobbyProps) => {
 
       {countingDown && <div>{Math.ceil(remaining / 1000)}</div>}
 
-      <GameTextArea key={raceText ?? 'idle'} raceText={raceText ?? ''} onProgress={onProgress} />
+      {standings && (
+        <ol>
+          {standings.map((standing, index) => (
+            <li key={standing.playerId}>
+              {index + 1}. {standing.nick} — {standing.wpm} WPM,{' '}
+              {standing.accuracy}%, {(standing.durationMs / 1000).toFixed(1)}s
+            </li>
+          ))}
+        </ol>
+      )}
+
+      <GameTextArea
+        key={raceText ?? 'idle'}
+        raceText={raceText ?? ''}
+        onProgress={onProgress}
+        onFinish={onFinish}
+      />
     </div>
   )
 }

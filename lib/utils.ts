@@ -1,9 +1,9 @@
 import { Result } from "@/types/type";
 
-export const splitText = (text: string) => {
+export const splitText = (text: string | null) => {
   const result: Result[] = [];
 
-  [...text].map((element) => {
+  [...text!].map((element) => {
     result.push({
       char: element,
       color: "black",

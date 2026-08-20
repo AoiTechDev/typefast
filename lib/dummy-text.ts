@@ -13,5 +13,5 @@ export const data = [
   },
 ];
 
-export const randomRaceText =
+export const pickRaceText = () =>
   data[Math.floor(Math.random() * data.length)].text;

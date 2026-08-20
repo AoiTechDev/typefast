@@ -2,8 +2,9 @@
 
 import { db } from "@/lib/db";
 import { players, rooms } from "@/lib/db/schema";
-import { randomRaceText } from "@/lib/dummy-text";
-import { roomChannelName } from "@/lib/pusher-client";
+import { pickRaceText } from "@/lib/dummy-text";
+import { roomChannelName } from "@/lib/pusher-channels";
+import { COUNTDOWN_MS } from "@/lib/race";
 import { pusherServer } from "@/lib/pusher-server";
 import { normalizeRoomCode } from "@/lib/room-code";
 import { and, eq, inArray, not } from "drizzle-orm";
@@ -53,8 +54,8 @@ export const toggleReady = async (code: string) => {
       .update(rooms)
       .set({
         status: "racing",
-        raceText: randomRaceText,
-        startedAt: new Date(),
+        raceText: pickRaceText(),
+        startedAt: new Date(Date.now() + COUNTDOWN_MS),
       })
       .where(
         and(
@@ -68,7 +69,7 @@ export const toggleReady = async (code: string) => {
 
     await pusherServer.trigger(roomChannelName(code), "race:start", {
       raceText: started.raceText,
-      countdownMs: 5000,
+      countdownMs: COUNTDOWN_MS,
     });
   }
   return { isReady: updated.isReady };
