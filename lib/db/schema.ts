@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+  boolean,
   index,
   integer,
   pgTable,
@@ -34,6 +35,8 @@ export const players = pgTable(
     joinedAt: timestamp("joined_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    isReady: boolean("is_ready").notNull().default(false),
+
   },
   (table) => [index("players_room_id_idx").on(table.roomId)],
 );

@@ -12,3 +12,6 @@ export const data = [
     text: "Technology moves quickly, so curiosity is one of the most useful.",
   },
 ];
+
+export const randomRaceText =
+  data[Math.floor(Math.random() * data.length)].text;

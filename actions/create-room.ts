@@ -6,6 +6,7 @@ import { db } from "../lib/db";
 import { players, rooms } from "../lib/db/schema";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { randomRaceText } from "@/lib/dummy-text";
 export type ActionState = {
   error?: string;
 };
@@ -21,29 +22,37 @@ export const createRoom = async (
   const { nick, maxPlayers } = parsedValues.data;
 
   let room: { id: string; code: string };
-  
+
   try {
     const roomCode = generateRoomCode();
-  
+
     [room] = await db
       .insert(rooms)
       .values({ code: roomCode, maxPlayers })
       .returning({ id: rooms.id, code: rooms.code });
-  
+
     const [player] = await db
       .insert(players)
       .values({ roomId: room.id, nick })
       .returning({ id: players.id });
-  
-    await db.update(rooms).set({ hostPlayerId: player.id }).where(eq(rooms.id, room.id));
-  
+
+    await db
+      .update(rooms)
+      .set({ hostPlayerId: player.id, raceText: randomRaceText })
+      .where(eq(rooms.id, room.id));
+
     const cookieStore = await cookies();
-    cookieStore.set("playerId", player.id, { httpOnly: true, sameSite: "lax", maxAge: 60 * 60 * 6, path: "/" });
+    cookieStore.set("playerId", player.id, {
+      httpOnly: true,
+      sameSite: "lax",
+      maxAge: 60 * 60 * 6,
+      path: "/",
+    });
   } catch (e) {
     console.error(e);
     return { error: "Nie udało się utworzyć pokoju" };
   }
-  
+
   redirect(`/room/${room.code}`);
 
   return {};

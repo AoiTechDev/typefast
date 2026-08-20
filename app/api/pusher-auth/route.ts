@@ -35,7 +35,7 @@ export const POST = async (request: Request) => {
   const code = normalizeRoomCode(channelName.slice(CHANNEL_PREFIX.length));
 
   const [player] = await db
-    .select({ nick: players.nick })
+    .select({ nick: players.nick, isReady: players.isReady })
     .from(players)
     .innerJoin(rooms, eq(players.roomId, rooms.id))
     .where(and(eq(players.id, playerId), eq(rooms.code, code)))
@@ -47,7 +47,7 @@ export const POST = async (request: Request) => {
 
   const auth = pusherServer.authorizeChannel(socketId, channelName, {
     user_id: playerId,
-    user_info: { nick: player.nick },
+    user_info: { nick: player.nick, isReady: player.isReady },
   });
 
   return Response.json(auth);
