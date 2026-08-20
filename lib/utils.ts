@@ -6,7 +6,7 @@ export const splitText = (text: string) => {
   [...text].map((element) => {
     result.push({
       char: element,
-      color: "white",
+      color: "black",
     });
   });
 
