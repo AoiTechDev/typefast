@@ -12,7 +12,7 @@ const Shell = ({ eyebrow, title, children }: {
   title: string
   children: React.ReactNode
 }) => (
-  <main className="px-6 py-12 md:px-10">
+  <main className="px-6 py-12 md:px-10 mx-auto ">
     <p className="font-mono text-xs font-bold tracking-[0.3em] text-dim uppercase">{eyebrow}</p>
     <h1 className="mt-3 max-w-3xl text-5xl leading-[0.9] font-extrabold tracking-tighter uppercase md:text-6xl">
       {title}

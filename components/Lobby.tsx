@@ -253,7 +253,7 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
 
   if (standings) {
     return (
-      <main className="px-6 py-10 md:px-10">
+      <main className="px-6 py-10 md:px-10 max-w-3xl mx-auto">
         <p className="font-mono text-xs font-bold tracking-[0.3em] text-dim uppercase">Final</p>
         <h1 className="mt-2 text-5xl font-extrabold tracking-tighter uppercase">Results</h1>
 
@@ -380,7 +380,7 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
   }
 
   return (
-    <main className="grid gap-10 px-6 py-10 md:grid-cols-2 md:px-10">
+    <main className="grid gap-10 px-6 py-10 md:grid-cols-2 md:px-10 ">
       <section className="border-[4px] border-ink bg-panel p-7 shadow-[10px_10px_0_0_var(--color-ink)]">
         <p className="font-mono text-xs font-bold tracking-widest text-dim uppercase">
           Share this code
