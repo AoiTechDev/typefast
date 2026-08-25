@@ -9,6 +9,8 @@ import CopyInvLinkButton from './CopyInvLinkButton'
 import { type Player, type Room } from '@/lib/db/schema'
 import { toggleReady } from '@/actions/toggle-ready'
 import { finishRace } from '@/actions/finish-race'
+import Button from './ui/Button'
+import { restartRace } from '@/actions/restart-race'
 
 type LobbyPlayer = {
   id: string
@@ -54,14 +56,16 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
   const [finished, setFinished] = useState(false)
   const [standings, setStandings] = useState<Standing[] | null>(null)
   const [readyError, setReadyError] = useState<string | null>(null)
+  const [restartError, setRestartError] = useState<string | null>(null)
   const [togglingReady, startToggleReady] = useTransition()
-
+  const [restarting, startRestartRace] = useTransition()
   const progressRef = useRef<number>(0)
   const wpmRef = useRef<number>(0)
   const lastSentRef = useRef<number | null>(null)
+  const startAtRef = useRef<number | null>(null)
   const channelRef = useRef<PresenceChannel | null>(null)
 
-  const isRacing = startAt !== null && remaining !== null && remaining <= 0 && !finished
+  const isRacing = startAt !== null && remaining === 0 && !finished
 
   useEffect(() => {
     const channelName = roomChannelName(code)
@@ -125,11 +129,16 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
     channel.bind(
       'race:start',
       ({ raceText, countdownMs }: { raceText: string; countdownMs: number }) => {
+        const beginsAt = Date.now() + countdownMs
+        startAtRef.current = beginsAt
         setRaceText(raceText)
         setFinished(false)
         setStandings(null)
-        setStartAt(Date.now() + countdownMs)
+        setStartAt(beginsAt)
+        setRemaining(countdownMs)
         lastSentRef.current = null
+        progressRef.current = 0
+        wpmRef.current = 0
         setPlayers(current =>
           current.map(player => ({ ...player, progress: 0, wpm: 0, durationMs: null })),
         )
@@ -173,12 +182,41 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
       setFinished(true)
     })
 
+    channel.bind('race:restart', () => {
+      startAtRef.current = null
+      setStandings(null)
+      setRaceText(null)
+      setStartAt(null)
+      setRemaining(null)
+      setFinished(false)
+      setRestartError(null)
+      lastSentRef.current = null
+      progressRef.current = 0
+      wpmRef.current = 0
+      setPlayers(current =>
+        current.map(player => ({
+          ...player,
+          isReady: false,
+          progress: 0,
+          wpm: 0,
+          durationMs: null,
+        })),
+      )
+    })
+
     return () => {
       channel.unbind_all()
       pusherClient.unsubscribe(channelName)
       channelRef.current = null
     }
   }, [code, playerId])
+
+
+  console.log("players: ", players)
+
+  useEffect(() => {
+    startAtRef.current = startAt
+  }, [startAt])
 
   useEffect(() => {
     if (startAt === null) return
@@ -230,12 +268,26 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
     [myId],
   )
 
-  const countingDown = remaining !== null && remaining > 0
+  const countingDown = raceText !== null && startAt !== null && remaining !== 0
 
   const onFinish = useCallback((typedText: string) => {
-    if (startAt === null) return
-    finishRace(code, { durationMs: Date.now() - startAt, typedText })
-  }, [startAt, code])
+    const beganAt = startAtRef.current
+    if (beganAt === null) return
+
+    const durationMs = Date.now() - beganAt
+    if (durationMs <= 0) return
+
+    setFinished(true)
+    setPlayers(current =>
+      current.map(player =>
+        player.id === myId ? { ...player, progress: 1, durationMs } : player,
+      ),
+    )
+
+    void finishRace(code, { durationMs, typedText })
+  }, [code, myId])
+
+
   const raceStarted = raceText !== null && startAt !== null
   const readyCount = players.filter(player => player.isReady).length
   const emptySeats = Math.max(0, (lobby?.maxPlayers ?? 0) - players.length)
@@ -251,13 +303,23 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
     })
   }
 
+  const handleResetLobby = () => {
+    setRestartError(null)
+
+    startRestartRace(async () => {
+      const result = await restartRace(code)
+
+      if (result && 'error' in result && result.error) setRestartError(result.error)
+    })
+  }
+
   if (standings) {
     return (
-      <main className="px-6 py-10 md:px-10 max-w-3xl mx-auto">
+      <main className="px-6 py-10 md:px-10 mx-auto max-w-3xl w-full">
         <p className="font-mono text-xs font-bold tracking-[0.3em] text-dim uppercase">Final</p>
         <h1 className="mt-2 text-5xl font-extrabold tracking-tighter uppercase">Results</h1>
 
-        <ol className="mt-8 max-w-3xl border-[4px] border-ink bg-panel shadow-[10px_10px_0_0_var(--color-ink)]">
+        <ol className="mt-8 border-[4px]  border-ink bg-panel shadow-[10px_10px_0_0_var(--color-ink)]">
           {standings.map((standing, index) => (
             <li
               key={standing.playerId}
@@ -265,9 +327,8 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
             >
               <span className="flex items-center gap-3">
                 <span
-                  className={`grid h-8 w-8 place-items-center border-[3px] border-ink font-mono font-extrabold ${
-                    index === 0 ? 'bg-lime' : 'bg-panel'
-                  }`}
+                  className={`grid h-8 w-8 place-items-center border-[3px] border-ink font-mono font-extrabold ${index === 0 ? 'bg-lime' : 'bg-panel'
+                    }`}
                 >
                   {index + 1}
                 </span>
@@ -280,11 +341,23 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
             </li>
           ))}
         </ol>
+
+        {restartError && (
+          <p className="mt-8 border-[3px] border-hot bg-hot px-3 py-2 font-mono text-sm text-panel">
+            {restartError}
+          </p>
+        )}
+
+        {myId === hostId && (
+          <Button className="mt-12" onClick={handleResetLobby} disabled={restarting}>
+            Reset
+          </Button>
+        )}
       </main>
     )
   }
 
-  if (raceStarted && countingDown) {
+  if (countingDown) {
     return (
       <main className="px-6 py-12 md:px-10">
         <div className="mx-auto max-w-3xl text-center">
@@ -293,7 +366,7 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
           </p>
 
           <p className="mt-4 text-[9rem] leading-none font-extrabold text-hot tabular-nums md:text-[11rem]">
-            {Math.ceil(remaining / 1000)}
+            {Math.ceil((remaining ?? 0) / 1000)}
           </p>
 
           <div className="mt-8 border-[3px] border-ink bg-bg p-8 text-left">
@@ -322,7 +395,7 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
     return (
       <main className="px-6 py-10 md:px-10">
         <GameTextArea
-          key={raceText ?? 'idle'}
+          key={startAt ?? 'idle'}
           raceText={raceText ?? ''}
           onProgress={onProgress}
           onFinish={onFinish}
@@ -362,25 +435,24 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
 
               <div className="mt-2 h-4 border-[3px] border-ink bg-sunk">
                 <div
-                  className={`h-full transition-all duration-300 ${
-                    player.durationMs !== null ? 'bg-hot' : 'bg-ink'
-                  }`}
+                  className={`h-full transition-all duration-300 ${player.durationMs !== null ? 'bg-hot' : 'bg-ink'
+                    }`}
                   style={{ width: `${Math.round(player.progress * 100)}%` }}
                 />
               </div>
             </div>
           ))}
 
-          <p className="border-t-[3px] border-ink px-5 py-3 font-mono text-xs text-dim">
-            Bars update 4×/sec and glide between samples, so nothing looks steppy.
-          </p>
+
         </section>
       </main>
     )
   }
 
+
+
   return (
-    <main className="grid gap-10 px-6 py-10 md:grid-cols-2 md:px-10 ">
+    <main className="grid gap-10 px-6 py-10 md:grid-cols-2 md:px-10 mx-auto">
       <section className="border-[4px] border-ink bg-panel p-7 shadow-[10px_10px_0_0_var(--color-ink)]">
         <p className="font-mono text-xs font-bold tracking-widest text-dim uppercase">
           Share this code
@@ -400,13 +472,7 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
           countdown fires on its own.
         </p>
 
-        <div className="mt-6 border-[2px] border-dashed border-dim p-4">
-          <p className="font-mono text-xs font-bold tracking-widest text-dim uppercase">Passage</p>
-          <p className="mt-2 font-mono text-sm leading-relaxed text-dim">
-            The keyboard is a small machine for turning thought into evidence. Every letter you
-            land is a claim, and every letter you miss is a correction waiting to happen.
-          </p>
-        </div>
+
       </section>
 
       <section className="border-[4px] border-ink bg-panel shadow-[10px_10px_0_0_var(--color-ink)]">
@@ -424,9 +490,8 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
           >
             <span className="flex items-center gap-3">
               <span
-                className={`grid h-8 w-8 place-items-center border-[3px] border-ink font-mono font-extrabold ${
-                  player.id === myId ? 'bg-lime' : 'bg-panel'
-                }`}
+                className={`grid h-8 w-8 place-items-center border-[3px] border-ink font-mono font-extrabold ${player.id === myId ? 'bg-lime' : 'bg-panel'
+                  }`}
               >
                 {player.nick.charAt(0).toUpperCase()}
               </span>
@@ -443,9 +508,8 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
                 </span>
               )}
               <span
-                className={`border-[2px] px-2 py-1 font-mono text-[11px] font-bold tracking-widest uppercase ${
-                  player.isReady ? 'border-ink bg-ink text-panel' : 'border-dim text-dim'
-                }`}
+                className={`border-[2px] px-2 py-1 font-mono text-[11px] font-bold tracking-widest uppercase ${player.isReady ? 'border-ink bg-ink text-panel' : 'border-dim text-dim'
+                  }`}
               >
                 {player.isReady ? '✓ Ready' : 'Waiting'}
               </span>
@@ -468,16 +532,19 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
             </p>
           )}
 
-          <button
+          {/* <button
             type="button"
             onClick={handleReady}
             disabled={togglingReady}
-            className={`w-full border-[3px] border-ink py-5 text-lg font-extrabold tracking-wide uppercase shadow-[6px_6px_0_0_var(--color-ink)] transition-transform active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:opacity-60 ${
-              me?.isReady ? 'bg-panel' : 'bg-lime'
-            }`}
+            className={`w-full border-[3px] border-ink py-5 text-lg font-extrabold tracking-wide uppercase shadow-[6px_6px_0_0_var(--color-ink)] transition-transform active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:opacity-60 `}
           >
             {me?.isReady ? 'Not ready anymore' : "I'm ready →"}
-          </button>
+          </button> */}
+
+          <Button type="button"
+            onClick={handleReady}
+            disabled={togglingReady} className={`${me?.isReady ? 'bg-panel' : 'bg-lime'
+              }`}> {me?.isReady ? 'Not ready anymore' : "I'm ready →"}</Button>
 
           <p className="mt-3 text-center font-mono text-[11px] tracking-widest text-dim uppercase">
             Starts the moment everyone is ready

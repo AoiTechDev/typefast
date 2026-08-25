@@ -24,16 +24,26 @@ export default function GameTextArea({ raceText, onProgress, onFinish }: GameTex
     const [isFocused, setIsFocused] = useState(false);
     const typedRef = useRef<string>("")
     const finishedRef = useRef(false)
+    const timerRef = useRef(0)
 
     const correctChars = randomText.filter((ch) => ch.color === "green").length;
     const wrongChars = randomText.filter((ch) => ch.color === "red").length;
     const typedChars = correctChars + wrongChars;
-
-    // 1 word ≈ 5 chars; use only correct (green) characters
     const wpm = timer === 0 ? 0 : (correctChars / 5) * (60 / timer);
     const accuracy = typedChars === 0 ? 100 : Math.round((correctChars / typedChars) * 100);
     const gameOver = randomText.length > 0 && cursor >= randomText.length;
 
+    const reportProgress = (next: typeof randomText, nextCursor: number) => {
+        const correct = next.filter((ch) => ch.color === "green").length
+        const firstWrong = next.findIndex((item) => item.color === "red")
+        const reached = firstWrong === -1 ? nextCursor : firstWrong
+        const elapsed = timerRef.current
+        const liveWpm = elapsed === 0 ? 0 : (correct / 5) * (60 / elapsed)
+        onProgress(next.length === 0 ? 0 : reached / next.length, liveWpm)
+    }
+
+    console.log("randomText", randomText)
+    console.log('text typed by user', textTypedByUser)
     const handleInput = (e: ChangeEvent<HTMLTextAreaElement>) => {
         if (gameOver) return;
 
@@ -50,10 +60,7 @@ export default function GameTextArea({ raceText, onProgress, onFinish }: GameTex
 
         const nextCursor = cursor + 1;
         setCursor(nextCursor);
-
-        const firstWrong = next.findIndex((item) => item.color === "red");
-        const reached = firstWrong === -1 ? nextCursor : firstWrong;
-        onProgress(reached / next.length, wpm);
+        reportProgress(next, nextCursor);
 
         if (nextCursor >= next.length && !finishedRef.current) {
             finishedRef.current = true;
@@ -78,16 +85,17 @@ export default function GameTextArea({ raceText, onProgress, onFinish }: GameTex
 
         const nextCursor = cursor - 1;
         setCursor(nextCursor);
-
-        const firstWrong = next.findIndex((item) => item.color === "red");
-        const reached = firstWrong === -1 ? nextCursor : firstWrong;
-        onProgress(reached / next.length, wpm);
+        reportProgress(next, nextCursor);
     };
 
     useEffect(() => {
         const id = setInterval(() => {
             if (gameOver) return
-            setTimer((prev) => prev + 1);
+            setTimer((prev) => {
+                const next = prev + 1
+                timerRef.current = next
+                return next
+            });
         }, 1000);
 
         return () => clearInterval(id);
@@ -121,6 +129,8 @@ export default function GameTextArea({ raceText, onProgress, onFinish }: GameTex
         return "text-dim";
     };
 
+
+
     return (
         <div className="mx-auto max-w-3xl">
             <div className="grid grid-cols-3 gap-4">
@@ -147,9 +157,8 @@ export default function GameTextArea({ raceText, onProgress, onFinish }: GameTex
                 className="relative mt-6 cursor-text border-[4px] border-ink bg-panel p-7 shadow-[10px_10px_0_0_var(--color-ink)]"
             >
                 <p
-                    className={`font-mono text-xl leading-[1.9] break-words ${
-                        isFocused ? "" : "blur-[6px] select-none"
-                    }`}
+                    className={`font-mono text-xl leading-[1.9] break-words ${isFocused ? "" : "blur-[6px] select-none"
+                        }`}
                 >
                     {randomText.map((ch, index) => (
                         <span key={index} className={charClassName(ch.color, index)}>

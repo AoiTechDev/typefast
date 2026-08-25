@@ -9,9 +9,7 @@ import { roomChannelName } from "@/lib/pusher-channels";
 import { pusherServer } from "@/lib/pusher-server";
 import { CLOCK_SLACK_MS, MAX_PLAUSIBLE_WPM } from "@/lib/race";
 import { normalizeRoomCode } from "@/lib/room-code";
-
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { UUID_PATTERN } from "@/lib/utils";
 
 type FinishSnapshot = {
   durationMs: number;
@@ -34,6 +32,7 @@ export const finishRace = async (code: string, snapshot: FinishSnapshot) => {
       raceText: rooms.raceText,
       status: rooms.status,
       startedAt: rooms.startedAt,
+      round: rooms.round,
     })
     .from(rooms)
     .where(eq(rooms.code, roomCode))
@@ -85,9 +84,14 @@ export const finishRace = async (code: string, snapshot: FinishSnapshot) => {
   }
 
   try {
-    await db
-      .insert(results)
-      .values({ roomId: room.id, playerId, durationMs, wpm, accuracy });
+    await db.insert(results).values({
+      roomId: room.id,
+      playerId,
+      round: room.round,
+      durationMs,
+      wpm,
+      accuracy,
+    });
   } catch (error) {
     if (isUniqueViolation(error)) return { error: "Wynik już zapisany" };
     throw error;
@@ -103,7 +107,7 @@ export const finishRace = async (code: string, snapshot: FinishSnapshot) => {
   const [finishedCount] = await db
     .select({ value: count() })
     .from(results)
-    .where(eq(results.roomId, room.id));
+    .where(and(eq(results.roomId, room.id), eq(results.round, room.round)));
 
   const [playerCount] = await db
     .select({ value: count() })
@@ -132,7 +136,7 @@ export const finishRace = async (code: string, snapshot: FinishSnapshot) => {
     })
     .from(results)
     .innerJoin(players, eq(results.playerId, players.id))
-    .where(eq(results.roomId, room.id))
+    .where(and(eq(results.roomId, room.id), eq(results.round, room.round)))
     .orderBy(asc(results.durationMs));
 
   await pusherServer.trigger(roomChannelName(roomCode), "race:finished", {
