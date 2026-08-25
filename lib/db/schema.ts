@@ -19,6 +19,7 @@ export const rooms = pgTable("rooms", {
   hostPlayerId: uuid("host_player_id"),
   raceText: text("race_text"),
   maxPlayers: integer("max_players").notNull().default(8),
+  round: integer('round').notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -40,9 +41,11 @@ export const results = pgTable(
     finishedAt: timestamp("finished_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    round: integer('round').notNull().default(1),
   },
+  
   (table) => [
-    unique("results_room_player_unique").on(table.roomId, table.playerId),
+    unique("results_room_player_round_unique").on(table.roomId, table.playerId, table.round),
     index("results_room_id_idx").on(table.roomId),
   ],
 );
