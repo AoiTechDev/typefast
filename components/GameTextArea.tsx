@@ -1,9 +1,11 @@
 "use client";
+import { FOG_CHARS_AHEAD, hasModifier, MODIFIERS, type ModifierId } from "@/lib/modifiers";
 import { formatTimer, splitText } from "@/lib/utils";
 import { ChangeEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 
 type GameTextAreaProps = {
     raceText: string;
+    modifiers: readonly ModifierId[];
     onProgress: (progress: number, wpm: number) => void;
     onFinish: (typedText: string) => void;
 }
@@ -15,7 +17,7 @@ const LEGEND = [
     { label: "Cursor", className: "bg-lime text-ink" },
 ];
 
-export default function GameTextArea({ raceText, onProgress, onFinish }: GameTextAreaProps) {
+export default function GameTextArea({ raceText, modifiers, onProgress, onFinish }: GameTextAreaProps) {
     const [randomText, setRandomText] = useState(splitText(raceText))
     const [textTypedByUser, setTextTypedByUser] = useState("");
     const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -25,6 +27,13 @@ export default function GameTextArea({ raceText, onProgress, onFinish }: GameTex
     const typedRef = useRef<string>("")
     const finishedRef = useRef(false)
     const timerRef = useRef(0)
+    const attemptedRef = useRef<Set<number>>(new Set())
+
+    const stopOnError = hasModifier(modifiers, "stop-on-error");
+    const noBackspace = hasModifier(modifiers, "no-backspace");
+    const fog = hasModifier(modifiers, "fog");
+    const mirror = hasModifier(modifiers, "mirror");
+    const canRewind = !stopOnError && !noBackspace;
 
     const correctChars = randomText.filter((ch) => ch.color === "green").length;
     const wrongChars = randomText.filter((ch) => ch.color === "red").length;
@@ -36,27 +45,38 @@ export default function GameTextArea({ raceText, onProgress, onFinish }: GameTex
     const reportProgress = (next: typeof randomText, nextCursor: number) => {
         const correct = next.filter((ch) => ch.color === "green").length
         const firstWrong = next.findIndex((item) => item.color === "red")
-        const reached = firstWrong === -1 ? nextCursor : firstWrong
+        const reached = canRewind && firstWrong !== -1 ? firstWrong : nextCursor
         const elapsed = timerRef.current
         const liveWpm = elapsed === 0 ? 0 : (correct / 5) * (60 / elapsed)
         onProgress(next.length === 0 ? 0 : reached / next.length, liveWpm)
     }
 
-    console.log("randomText", randomText)
-    console.log('text typed by user', textTypedByUser)
     const handleInput = (e: ChangeEvent<HTMLTextAreaElement>) => {
         if (gameOver) return;
 
         const typedChar = e.currentTarget.value.slice(-1);
         const isCorrect = typedChar === randomText[cursor]?.char;
+        const wasWrong = randomText[cursor]?.color === "red";
+
+        setTextTypedByUser("");
+
+        if (!attemptedRef.current.has(cursor)) {
+            attemptedRef.current.add(cursor);
+            typedRef.current += typedChar;
+        }
 
         const next = randomText.map((item, index) =>
-            index === cursor ? { ...item, color: isCorrect ? ("green" as const) : ("red" as const) } : item,
+            index === cursor
+                ? { ...item, color: isCorrect && !wasWrong ? ("green" as const) : ("red" as const) }
+                : item,
         );
 
         setRandomText(next);
-        setTextTypedByUser("");
-        typedRef.current += typedChar;
+
+        if (stopOnError && !isCorrect) {
+            reportProgress(next, cursor);
+            return;
+        }
 
         const nextCursor = cursor + 1;
         setCursor(nextCursor);
@@ -73,8 +93,9 @@ export default function GameTextArea({ raceText, onProgress, onFinish }: GameTex
 
         e.preventDefault();
 
-        if (cursor === 0) return;
+        if (!canRewind || cursor === 0) return;
 
+        attemptedRef.current.delete(cursor - 1);
         typedRef.current = typedRef.current.slice(0, -1);
 
         const next = randomText.map((item, index) =>
@@ -122,14 +143,16 @@ export default function GameTextArea({ raceText, onProgress, onFinish }: GameTex
     }, [focusInput]);
 
     const charClassName = (color: string, index: number) => {
+        if (fog && index > cursor + FOG_CHARS_AHEAD) {
+            return "text-dim blur-[5px]";
+        }
+
         if (index === cursor) return "bg-lime text-ink";
         if (color === "green") return "text-ink";
         if (color === "red") return "bg-hot text-panel";
 
         return "text-dim";
     };
-
-
 
     return (
         <div className="mx-auto max-w-3xl">
@@ -157,7 +180,7 @@ export default function GameTextArea({ raceText, onProgress, onFinish }: GameTex
                 className="relative mt-6 cursor-text border-[4px] border-ink bg-panel p-7 shadow-[10px_10px_0_0_var(--color-ink)]"
             >
                 <p
-                    className={`font-mono text-xl leading-[1.9] break-words ${isFocused ? "" : "blur-[6px] select-none"
+                    className={`font-mono text-xl leading-[1.9] break-words ${mirror ? "scale-x-[-1]" : ""} ${isFocused ? "" : "blur-[6px] select-none"
                         }`}
                 >
                     {randomText.map((ch, index) => (
@@ -186,7 +209,7 @@ export default function GameTextArea({ raceText, onProgress, onFinish }: GameTex
                 />
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-5">
+            <div className="mt-4 flex flex-wrap items-center gap-5">
                 {LEGEND.map((item) => (
                     <span key={item.label} className="flex items-center gap-2">
                         <span className={`px-1 font-mono text-sm ${item.className}`}>n</span>
@@ -195,6 +218,19 @@ export default function GameTextArea({ raceText, onProgress, onFinish }: GameTex
                         </span>
                     </span>
                 ))}
+
+                {modifiers.length > 0 && (
+                    <span className="ml-auto flex flex-wrap gap-2">
+                        {MODIFIERS.filter((modifier) => modifiers.includes(modifier.id)).map((modifier) => (
+                            <span
+                                key={modifier.id}
+                                className="border-[2px] border-ink bg-ink px-2 py-1 font-mono text-[11px] font-bold tracking-widest text-panel uppercase"
+                            >
+                                {modifier.label}
+                            </span>
+                        ))}
+                    </span>
+                )}
             </div>
         </div>
     );

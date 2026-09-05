@@ -45,7 +45,7 @@ export const joinRoom = async (
     });
   } catch (e) {
     console.error(e);
-    return { error: "nie udalo sie dolaczcy" };
+    return { error: "Could not join the room" };
   }
 
   redirect(`/room/${room.code}`);

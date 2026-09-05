@@ -15,7 +15,7 @@ export const toggleReady = async (code: string) => {
   const cookieStore = await cookies();
   const playerId = cookieStore.get("playerId")?.value;
 
-  if (!playerId) return { error: "Nie jesteś w tym pokoju" };
+  if (!playerId) return { error: "You are not in this room" };
   const [updated] = await db
     .update(players)
     .set({ isReady: not(players.isReady) })
@@ -33,7 +33,7 @@ export const toggleReady = async (code: string) => {
     )
     .returning({ isReady: players.isReady });
 
-  if (!updated) return { error: "Nie można zmienić gotowości" };
+  if (!updated) return { error: "Could not change your ready state" };
 
   await pusherServer.trigger(roomChannelName(code), "player:ready", {
     playerId,
@@ -63,12 +63,13 @@ export const toggleReady = async (code: string) => {
           eq(rooms.status, "waiting"),
         ),
       )
-      .returning({ raceText: rooms.raceText });
+      .returning({ raceText: rooms.raceText, modifiers: rooms.modifiers });
 
     if (!started) return { isReady: true };
 
     await pusherServer.trigger(roomChannelName(code), "race:start", {
       raceText: started.raceText,
+      modifiers: started.modifiers,
       countdownMs: COUNTDOWN_MS,
     });
   }

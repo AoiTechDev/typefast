@@ -49,7 +49,7 @@ export const createRoom = async (
     });
   } catch (e) {
     console.error(e);
-    return { error: "Nie udało się utworzyć pokoju" };
+    return { error: "Could not create the room" };
   }
 
   redirect(`/room/${room.code}`);

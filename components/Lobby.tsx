@@ -1,4 +1,5 @@
 'use client'
+import clsx from 'clsx'
 import type { Members, PresenceChannel } from 'pusher-js'
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 
@@ -11,6 +12,8 @@ import { toggleReady } from '@/actions/toggle-ready'
 import { finishRace } from '@/actions/finish-race'
 import Button from './ui/Button'
 import { restartRace } from '@/actions/restart-race'
+import { updateModifiers } from '@/actions/update-modifiers'
+import { MODIFIERS, type ModifierId } from '@/lib/modifiers'
 
 type LobbyPlayer = {
   id: string
@@ -55,10 +58,13 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
   const [myId, setMyId] = useState<string | null>(playerId)
   const [finished, setFinished] = useState(false)
   const [standings, setStandings] = useState<Standing[] | null>(null)
+  const [modifiers, setModifiers] = useState<ModifierId[]>(() => lobby?.modifiers ?? [])
   const [readyError, setReadyError] = useState<string | null>(null)
   const [restartError, setRestartError] = useState<string | null>(null)
+  const [modifierError, setModifierError] = useState<string | null>(null)
   const [togglingReady, startToggleReady] = useTransition()
   const [restarting, startRestartRace] = useTransition()
+  const [savingModifiers, startSaveModifiers] = useTransition()
   const progressRef = useRef<number>(0)
   const wpmRef = useRef<number>(0)
   const lastSentRef = useRef<number | null>(null)
@@ -127,11 +133,28 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
     )
 
     channel.bind(
+      'room:modifiers',
+      ({ modifiers }: { modifiers: ModifierId[] }) => {
+        setModifiers(modifiers)
+        setModifierError(null)
+      },
+    )
+
+    channel.bind(
       'race:start',
-      ({ raceText, countdownMs }: { raceText: string; countdownMs: number }) => {
+      ({
+        raceText,
+        modifiers,
+        countdownMs,
+      }: {
+        raceText: string
+        modifiers: ModifierId[]
+        countdownMs: number
+      }) => {
         const beginsAt = Date.now() + countdownMs
         startAtRef.current = beginsAt
         setRaceText(raceText)
+        setModifiers(modifiers)
         setFinished(false)
         setStandings(null)
         setStartAt(beginsAt)
@@ -212,8 +235,6 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
   }, [code, playerId])
 
 
-  console.log("players: ", players)
-
   useEffect(() => {
     startAtRef.current = startAt
   }, [startAt])
@@ -292,6 +313,7 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
   const readyCount = players.filter(player => player.isReady).length
   const emptySeats = Math.max(0, (lobby?.maxPlayers ?? 0) - players.length)
   const me = players.find(player => player.id === myId)
+  const isHost = myId === hostId
 
   const handleReady = () => {
     setReadyError(null)
@@ -300,6 +322,21 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
       const result = await toggleReady(code)
 
       if (result && 'error' in result && result.error) setReadyError(result.error)
+    })
+  }
+
+  const handleToggleModifier = (id: ModifierId) => {
+    const next = modifiers.includes(id)
+      ? modifiers.filter(modifier => modifier !== id)
+      : [...modifiers, id]
+
+    setModifierError(null)
+    setModifiers(next)
+
+    startSaveModifiers(async () => {
+      const result = await updateModifiers(code, next)
+
+      if (result && 'error' in result && result.error) setModifierError(result.error)
     })
   }
 
@@ -373,6 +410,19 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
             <p className="font-mono text-lg leading-[1.9] text-dim md:text-xl">{raceText}</p>
           </div>
 
+          {modifiers.length > 0 && (
+            <div className="mt-6 flex flex-wrap justify-center gap-2">
+              {MODIFIERS.filter(modifier => modifiers.includes(modifier.id)).map(modifier => (
+                <span
+                  key={modifier.id}
+                  className="border-[3px] border-ink bg-ink px-3 py-2 font-mono text-[11px] font-bold tracking-widest text-panel uppercase"
+                >
+                  {modifier.label}
+                </span>
+              ))}
+            </div>
+          )}
+
           <p className="mt-6 font-mono text-xs font-bold tracking-[0.3em] text-dim uppercase">
             Typing unlocks at zero
           </p>
@@ -396,6 +446,7 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
       <main className="px-6 py-10 md:px-10">
         <GameTextArea
           key={startAt ?? 'idle'}
+          modifiers={modifiers}
           raceText={raceText ?? ''}
           onProgress={onProgress}
           onFinish={onFinish}
@@ -472,7 +523,56 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
           countdown fires on its own.
         </p>
 
+        <hr className="mt-8 border-t-[3px] border-ink" />
 
+        <p className="mt-5 font-mono text-xs font-bold tracking-widest text-dim uppercase">
+          {isHost ? 'Rules' : 'Rules set by host'}
+        </p>
+
+        <div className="mt-3 grid gap-2">
+          {MODIFIERS.map(modifier => {
+            const active = modifiers.includes(modifier.id)
+
+            return (
+              <button
+                key={modifier.id}
+                type="button"
+                onClick={() => handleToggleModifier(modifier.id)}
+                disabled={!isHost || savingModifiers}
+                className={clsx(
+                  'border-[3px] border-ink px-4 py-3 text-left transition-transform',
+                  active ? 'bg-ink text-panel' : 'bg-panel',
+                  isHost
+                    ? 'active:translate-x-[2px] active:translate-y-[2px]'
+                    : 'cursor-default opacity-80',
+                )}
+              >
+                <span className="flex items-center justify-between gap-3">
+                  <span className="font-mono text-sm font-bold tracking-widest uppercase">
+                    {modifier.label}
+                  </span>
+                  <span className="font-mono text-[11px] font-bold tracking-widest uppercase">
+                    {active ? 'On' : 'Off'}
+                  </span>
+                </span>
+                <span
+                  className={clsx(
+                    'mt-1 block font-mono text-[11px]',
+                    active ? 'text-panel' : 'text-dim',
+                  )}
+                >
+                  {modifier.description}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        {modifierError && (
+          <p className="mt-4 border-[3px] border-hot bg-hot px-3 py-2 font-mono text-sm text-panel">
+            {modifierError}
+          </p>
+        )}
       </section>
 
       <section className="border-[4px] border-ink bg-panel shadow-[10px_10px_0_0_var(--color-ink)]">

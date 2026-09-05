@@ -15,7 +15,7 @@ export const restartRace = async (code: string) => {
   const playerId = cookieStore.get("playerId")?.value;
 
   if (!playerId || !UUID_PATTERN.test(playerId)) {
-    return { error: "Nie jesteś w tym pokoju" };
+    return { error: "You are not in this room" };
   }
 
   const roomCode = normalizeRoomCode(code);
@@ -31,11 +31,11 @@ export const restartRace = async (code: string) => {
     .limit(1);
 
   if (!room || room.status !== "finished") {
-    return { error: "Wyścig jeszcze się nie skończył" };
+    return { error: "The race has not finished yet" };
   }
 
   if (room.hostPlayerId !== playerId) {
-    return { error: "Tylko host może zresetować lobby" };
+    return { error: "Only the host can reset the lobby" };
   }
 
   const [player] = await db
@@ -45,7 +45,7 @@ export const restartRace = async (code: string) => {
     .limit(1);
 
   if (!player) {
-    return { error: "Nie jesteś w tym pokoju" };
+    return { error: "You are not in this room" };
   }
 
   await db

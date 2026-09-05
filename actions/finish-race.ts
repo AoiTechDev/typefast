@@ -21,7 +21,7 @@ export const finishRace = async (code: string, snapshot: FinishSnapshot) => {
   const playerId = cookieStore.get("playerId")?.value;
 
   if (!playerId || !UUID_PATTERN.test(playerId)) {
-    return { error: "Nie jesteś w tym pokoju" };
+    return { error: "You are not in this room" };
   }
 
   const roomCode = normalizeRoomCode(code);
@@ -39,7 +39,7 @@ export const finishRace = async (code: string, snapshot: FinishSnapshot) => {
     .limit(1);
 
   if (!room || room.status !== "racing" || !room.raceText || !room.startedAt) {
-    return { error: "Wyścig nie trwa" };
+    return { error: "The race is not running" };
   }
 
   const [player] = await db
@@ -49,7 +49,7 @@ export const finishRace = async (code: string, snapshot: FinishSnapshot) => {
     .limit(1);
 
   if (!player) {
-    return { error: "Nie jesteś w tym pokoju" };
+    return { error: "You are not in this room" };
   }
 
   const { raceText } = room;
@@ -57,7 +57,7 @@ export const finishRace = async (code: string, snapshot: FinishSnapshot) => {
   const durationMs = Math.round(snapshot.durationMs);
 
   if (typedText.length !== raceText.length) {
-    return { error: "Nieprawidłowy wynik" };
+    return { error: "Invalid result" };
   }
 
   const elapsedOnServer = Date.now() - room.startedAt.getTime();
@@ -67,7 +67,7 @@ export const finishRace = async (code: string, snapshot: FinishSnapshot) => {
     durationMs <= 0 ||
     durationMs > elapsedOnServer + CLOCK_SLACK_MS
   ) {
-    return { error: "Nieprawidłowy czas" };
+    return { error: "Invalid time" };
   }
 
   let correctChars = 0;
@@ -80,7 +80,7 @@ export const finishRace = async (code: string, snapshot: FinishSnapshot) => {
   const accuracy = Math.round((correctChars / raceText.length) * 100);
 
   if (wpm > MAX_PLAUSIBLE_WPM) {
-    return { error: "Nieprawidłowy wynik" };
+    return { error: "Invalid result" };
   }
 
   try {
@@ -93,7 +93,7 @@ export const finishRace = async (code: string, snapshot: FinishSnapshot) => {
       accuracy,
     });
   } catch (error) {
-    if (isUniqueViolation(error)) return { error: "Wynik już zapisany" };
+    if (isUniqueViolation(error)) return { error: "Result already saved" };
     throw error;
   }
 

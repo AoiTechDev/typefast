@@ -3,12 +3,15 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+
+import type { ModifierId } from "@/lib/modifiers";
 
 export const rooms = pgTable("rooms", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -20,6 +23,10 @@ export const rooms = pgTable("rooms", {
   raceText: text("race_text"),
   maxPlayers: integer("max_players").notNull().default(8),
   round: integer('round').notNull().default(1),
+  modifiers: jsonb("modifiers")
+    .$type<ModifierId[]>()
+    .notNull()
+    .default([]),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
