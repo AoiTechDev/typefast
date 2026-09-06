@@ -13,5 +13,9 @@ export const data = [
   },
 ];
 
-export const pickRaceText = () =>
-  data[Math.floor(Math.random() * data.length)].text;
+export const pickRaceText = (exclude?: string) => {
+  const pool = data.filter((item) => item.text !== exclude);
+  const source = pool.length > 0 ? pool : data;
+
+  return source[Math.floor(Math.random() * source.length)].text;
+};

@@ -1,11 +1,11 @@
 'use client'
-import clsx from 'clsx'
 import type { Members, PresenceChannel } from 'pusher-js'
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 
 import { pusherClient } from '@/lib/pusher-client'
 import { roomChannelName } from '@/lib/pusher-channels'
 import GameTextArea from './GameTextArea'
+import ModifierPicker from './ModifierPicker'
 import CopyInvLinkButton from './CopyInvLinkButton'
 import { type Player, type Room } from '@/lib/db/schema'
 import { toggleReady } from '@/actions/toggle-ready'
@@ -529,43 +529,12 @@ const Lobby = ({ code, hostId, playerId, lobby }: LobbyProps) => {
           {isHost ? 'Rules' : 'Rules set by host'}
         </p>
 
-        <div className="mt-3 grid gap-2">
-          {MODIFIERS.map(modifier => {
-            const active = modifiers.includes(modifier.id)
-
-            return (
-              <button
-                key={modifier.id}
-                type="button"
-                onClick={() => handleToggleModifier(modifier.id)}
-                disabled={!isHost || savingModifiers}
-                className={clsx(
-                  'border-[3px] border-ink px-4 py-3 text-left transition-transform',
-                  active ? 'bg-ink text-panel' : 'bg-panel',
-                  isHost
-                    ? 'active:translate-x-[2px] active:translate-y-[2px]'
-                    : 'cursor-default opacity-80',
-                )}
-              >
-                <span className="flex items-center justify-between gap-3">
-                  <span className="font-mono text-sm font-bold tracking-widest uppercase">
-                    {modifier.label}
-                  </span>
-                  <span className="font-mono text-[11px] font-bold tracking-widest uppercase">
-                    {active ? 'On' : 'Off'}
-                  </span>
-                </span>
-                <span
-                  className={clsx(
-                    'mt-1 block font-mono text-[11px]',
-                    active ? 'text-panel' : 'text-dim',
-                  )}
-                >
-                  {modifier.description}
-                </span>
-              </button>
-            )
-          })}
+        <div className="mt-3">
+          <ModifierPicker
+            modifiers={modifiers}
+            onToggle={handleToggleModifier}
+            disabled={!isHost || savingModifiers}
+          />
         </div>
 
         {modifierError && (

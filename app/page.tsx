@@ -1,4 +1,5 @@
 'use client'
+import Link from 'next/link'
 import { useActionState, useState } from 'react'
 
 import { createRoom } from '@/actions/create-room'
@@ -142,6 +143,28 @@ const HomePage = () => {
             {joining ? 'Joining…' : 'Join room →'}
           </button>
         </form>
+
+        <Link
+          href="/solo"
+          className="border-[4px] border-ink bg-panel p-7 shadow-[8px_8px_0_0_var(--color-ink)] transition-transform active:translate-x-[3px] active:translate-y-[3px] active:shadow-none md:col-span-2"
+        >
+          <span className="inline-block border-[3px] border-ink bg-hot px-2 font-mono text-xs font-extrabold tracking-widest text-panel uppercase">
+            Path C · Solo
+          </span>
+
+          <div className="mt-5 flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="text-3xl font-extrabold tracking-tight uppercase">Race yourself</h2>
+              <p className="mt-1 font-mono text-sm text-dim">
+                No code, no waiting. Pick your rules and go.
+              </p>
+            </div>
+
+            <span className="font-mono text-sm font-extrabold tracking-widest uppercase">
+              Start solo →
+            </span>
+          </div>
+        </Link>
       </div>
     </main>
   )

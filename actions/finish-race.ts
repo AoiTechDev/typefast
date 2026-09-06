@@ -9,6 +9,7 @@ import { roomChannelName } from "@/lib/pusher-channels";
 import { pusherServer } from "@/lib/pusher-server";
 import { CLOCK_SLACK_MS, MAX_PLAUSIBLE_WPM } from "@/lib/race";
 import { normalizeRoomCode } from "@/lib/room-code";
+import { scoreRace } from "@/lib/score";
 import { UUID_PATTERN } from "@/lib/utils";
 
 type FinishSnapshot = {
@@ -70,14 +71,7 @@ export const finishRace = async (code: string, snapshot: FinishSnapshot) => {
     return { error: "Invalid time" };
   }
 
-  let correctChars = 0;
-
-  for (let index = 0; index < raceText.length; index++) {
-    if (typedText[index] === raceText[index]) correctChars++;
-  }
-
-  const wpm = Math.round(correctChars / 5 / (durationMs / 60000));
-  const accuracy = Math.round((correctChars / raceText.length) * 100);
+  const { wpm, accuracy } = scoreRace(raceText, typedText, durationMs);
 
   if (wpm > MAX_PLAUSIBLE_WPM) {
     return { error: "Invalid result" };
